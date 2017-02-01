@@ -8,4 +8,12 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
+    <style name="About">
+    <item name="android:textAppearance">@style/TextAppearance.About</item>
+    <item name="lineHeightHint">24sp</item>
+</style>
+    <style name="TextAppearance.About" parent="@android:style/TextAppearance.Material.Body1">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/text_secondary_dark</item>
+    </style>
 </resources>
