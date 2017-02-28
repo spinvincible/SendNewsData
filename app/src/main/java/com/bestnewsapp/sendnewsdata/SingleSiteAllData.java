@@ -10,6 +10,10 @@ import android.text.Spanned;
 import android.util.Log;
 import android.widget.TextView;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -17,7 +21,10 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 public class SingleSiteAllData extends AppCompatActivity {
 
@@ -50,6 +57,8 @@ public class SingleSiteAllData extends AppCompatActivity {
     class LoadData extends AsyncTask<Void, Void, String > {
         String data = "";
         Context context;
+        List<SinglePostData> allPosts = new ArrayList<>();
+
 
         public LoadData(Context context) {
             this.context = context;
@@ -61,8 +70,6 @@ public class SingleSiteAllData extends AppCompatActivity {
             super.onPreExecute();
             progressDialog.setMessage("Into The OnPreExecute");
             progressDialog.show();
-
-
         }
 
         @Override
@@ -71,32 +78,36 @@ public class SingleSiteAllData extends AppCompatActivity {
             Document doc = null;
 
 
-            String url = "https://www.washingtonpost.com/opinions/";
+            String NytTimes = "https://www.nytimes.com/section/us";
             String singleArticleTOI = "http://timesofindia.indiatimes.com/sports/ipl/news/ipl-10-to-start-on-april-5-existing-process-to-continue-for-vendor-deals/articleshow/56919653.cms";
             String test2 = "http://timesofindia.indiatimes.com/india/next-month-volunteers-may-knock-on-your-door-for-cancer-diabetes-tests/articleshow/56696903.cms";
             Elements el, views, toi = null;
             // String datato = "";
+            String urlPost= "";
+            String img_url= "";
+            String senderName= "";
+            String content= "";
             String title = "";
             String image = "";
             String summary = "";
             String author = "";
             String timeStamp = "";
             try {
-                doc = Jsoup.connect(test2).get();
-//                el = doc.select("div.story-headline");
-                toi = doc.select("div.Normal");
-                title = toi.toString();
-                Log.i("Data From the Site",toi.toString() );
-                // int size = el.size();
-//                for (Element element : el) {
-//
-//                    title = element.select("h2.headline").text();
-//                    summary = element.select("p.summary").text();
-//                    image = element.select("img[src]").attr("src");
-//                    author = element.select("p.byline").text().replaceAll("By ", "");
-//                    timeStamp = element.select("time.dateline").text();
-//                    Log.i("Data for the ImageURL",image );
-//                }
+                doc = Jsoup.connect(NytTimes).get();
+                el = doc.select("article");
+
+
+                for (Element element : el) {
+                    title = element.select("h2.headline").text();
+                    image = element.select("img[src]").attr("src");
+                    timeStamp = element.select("time.dateline").text();
+                    urlPost = element.select("a[href]").attr("href");
+                    if (!title.isEmpty() && !image.isEmpty() && !timeStamp.isEmpty() && !urlPost.isEmpty()) {
+                        SinglePostData newsItem = new SinglePostData(title, urlPost, image, timeStamp);
+                        allPosts.add(newsItem);
+                    }
+
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -106,14 +117,35 @@ public class SingleSiteAllData extends AppCompatActivity {
         @Override
         protected void onPostExecute(String s) {
             super.onPostExecute(s);
-            Spanned result;
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                result = Html.fromHtml(s, Html.FROM_HTML_MODE_LEGACY);
+
+            for(int i = 0; i < allPosts.size(); i ++)
+            {
+                SinglePostData oneEntry = allPosts.get(i);
+                final DatabaseReference databaseReference = FirebaseUtil.getBaseRef();
+                DatabaseReference AllPostsRef = FirebaseUtil.getAllPostsRef();
+                final String postsKey = AllPostsRef.push().getKey();
+
+                Map<String, Object> postValues = oneEntry.toMap();
+                Map<String, Object> updatedUserData = new HashMap<>();
+                updatedUserData.put(FirebaseUtil.getAllPostsPaths()+postsKey, postValues);
+                updatedUserData.put(FirebaseUtil.getNYTPaths()+postsKey, postValues);
+                databaseReference.updateChildren(updatedUserData);
+
+//                Map<String, Object> updatedUserData = new HashMap<>();
+//                updatedUserData.put(FirebaseUtil.getAllPostsPaths()+postsKey, new ObjectMapper().convertValue(oneEntry, Map.class));
+//                updatedUserData.put(FirebaseUtil.getNYTPaths()+postsKey, new ObjectMapper().convertValue(oneEntry, Map.class));
+//                databaseReference.updateChildren(updatedUserData);
+
             }
-            else {
-                result = Html.fromHtml(s);
-            }
-            allSiteData.setText(result);
+
+//            Spanned result;
+//            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+//                result = Html.fromHtml(s, Html.FROM_HTML_MODE_LEGACY);
+//            }
+//            else {
+//                result = Html.fromHtml(s);
+//            }
+//            allSiteData.setText(result);
             progressDialog.dismiss();
 
         }
