@@ -2,17 +2,17 @@ package com.bestnewsapp.sendnewsdata;
 
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
+import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.text.Html;
-import android.text.Spanned;
 import android.util.Log;
 import android.widget.TextView;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -20,16 +20,20 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 public class SingleSiteAllData extends AppCompatActivity {
 
     TextView allSiteData;
     ProgressDialog progressDialog;
+
+    List<SinglePostData> alreadySentData = new ArrayList<>();
+    List<SinglePostData> allPosts = new ArrayList<>();
+    List<SinglePostData> toBeSentToFirebase = new ArrayList<>();
 
 
     @Override
@@ -44,21 +48,21 @@ public class SingleSiteAllData extends AppCompatActivity {
         progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
 
 
-        allSiteData = (TextView) findViewById(R.id.setText);
+//        allSiteData = (TextView) findViewById(R.id.setText);
 
         final LoadData loadData = new LoadData(this);
         loadData.execute();
 
+        allPosts = loadData.getAllNewPosts();
 
+//        compareTheLists(allPosts, alreadySentData, toBeSentToFirebase);
     }
 
 
-
-    class LoadData extends AsyncTask<Void, Void, String > {
+    public class LoadData extends AsyncTask<Void, Void, String> {
         String data = "";
         Context context;
         List<SinglePostData> allPosts = new ArrayList<>();
-
 
         public LoadData(Context context) {
             this.context = context;
@@ -79,35 +83,38 @@ public class SingleSiteAllData extends AppCompatActivity {
 
 
             String NytTimes = "https://www.nytimes.com/section/us";
+            String NYTimesSinglePost = "https://www.nytimes.com/2017/02/28/world/africa/nigeria-civilian-massacre.html";
             String singleArticleTOI = "http://timesofindia.indiatimes.com/sports/ipl/news/ipl-10-to-start-on-april-5-existing-process-to-continue-for-vendor-deals/articleshow/56919653.cms";
             String test2 = "http://timesofindia.indiatimes.com/india/next-month-volunteers-may-knock-on-your-door-for-cancer-diabetes-tests/articleshow/56696903.cms";
             Elements el, views, toi = null;
+            Element singleAttr;
             // String datato = "";
-            String urlPost= "";
-            String img_url= "";
-            String senderName= "";
-            String content= "";
+            String urlPost = "";
+            String img_url = "";
+            String senderName = "";
+            String content = "";
             String title = "";
-            String image = "";
-            String summary = "";
-            String author = "";
-            String timeStamp = "";
             try {
+//                doc = Jsoup.connect(NYTimesSinglePost).get();
                 doc = Jsoup.connect(NytTimes).get();
                 el = doc.select("article");
+//                singleAttr = doc.select("article").first();
+//
+//                Log.d("SingleSiteData", singleAttr.toString());
+//                Log.d("el", el.toString());
+//
+//                title = singleAttr.select("h1.headline").text();
+//                img_url = singleAttr.select("img").first().toString();
+//                content = singleAttr.select("p.story-body-text.story-content").toString();
+//
+//                Log.d("SingleSiteData", title + "\n" + img_url + "\n" + content + "\n");
 
+                parseNYTimesData(el, allPosts);
 
-                for (Element element : el) {
-                    title = element.select("h2.headline").text();
-                    image = element.select("img[src]").attr("src");
-                    timeStamp = element.select("time.dateline").text();
-                    urlPost = element.select("a[href]").attr("href");
-                    if (!title.isEmpty() && !image.isEmpty() && !timeStamp.isEmpty() && !urlPost.isEmpty()) {
-                        SinglePostData newsItem = new SinglePostData(title, urlPost, image, timeStamp);
-                        allPosts.add(newsItem);
-                    }
+                addDataToSharedPreferences(allPosts, context);
 
-                }
+                compareTheLists(allPosts, context);
+
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -118,8 +125,16 @@ public class SingleSiteAllData extends AppCompatActivity {
         protected void onPostExecute(String s) {
             super.onPostExecute(s);
 
-            for(int i = 0; i < allPosts.size(); i ++)
-            {
+//            sendDataToFirebase(allPosts);
+
+
+            progressDialog.dismiss();
+
+        }
+
+
+        public void sendDataToFirebase(List<SinglePostData> allPosts) {
+            for (int i = 0; i < allPosts.size(); i++) {
                 SinglePostData oneEntry = allPosts.get(i);
                 final DatabaseReference databaseReference = FirebaseUtil.getBaseRef();
                 DatabaseReference AllPostsRef = FirebaseUtil.getAllPostsRef();
@@ -127,8 +142,8 @@ public class SingleSiteAllData extends AppCompatActivity {
 
                 Map<String, Object> postValues = oneEntry.toMap();
                 Map<String, Object> updatedUserData = new HashMap<>();
-                updatedUserData.put(FirebaseUtil.getAllPostsPaths()+postsKey, postValues);
-                updatedUserData.put(FirebaseUtil.getNYTPaths()+postsKey, postValues);
+                updatedUserData.put(FirebaseUtil.getAllPostsPaths() + postsKey, postValues);
+                updatedUserData.put(FirebaseUtil.getNYTPaths() + postsKey, postValues);
                 databaseReference.updateChildren(updatedUserData);
 
 //                Map<String, Object> updatedUserData = new HashMap<>();
@@ -137,18 +152,84 @@ public class SingleSiteAllData extends AppCompatActivity {
 //                databaseReference.updateChildren(updatedUserData);
 
             }
+        }
 
-//            Spanned result;
-//            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-//                result = Html.fromHtml(s, Html.FROM_HTML_MODE_LEGACY);
+        public void parseNYTimesData(Elements el, List<SinglePostData> oAllPosts) {
+
+            for (Element element : el) {
+                String title = element.select("h2.headline").text();
+                String image = element.select("img[src]").attr("src");
+                String timeStamp = element.select("time.dateline").text();
+                String urlPost = element.select("a[href]").attr("href");
+                if (!title.isEmpty() && !image.isEmpty() && !timeStamp.isEmpty() && !urlPost.isEmpty()) {
+                    SinglePostData newsItem = new SinglePostData(title, urlPost, image, timeStamp);
+                    oAllPosts.add(newsItem);
+                }
+
+            }
+        }
+
+
+//        public void compareTheLists(List<SinglePostData> allPosts, List<SinglePostData> alreadySent, List<SinglePostData> postsToSendToFirebase) {
+//
+//            for (int i = 0; i < allPosts.size(); i++) {
+//                for (int j = 0; j < alreadySent.size(); j++) {
+//                    if (allPosts.get(i) == alreadySent.get(j))
+//                        postsToSendToFirebase.add(allPosts.get(i));
+//                }
 //            }
-//            else {
-//                result = Html.fromHtml(s);
-//            }
-//            allSiteData.setText(result);
-            progressDialog.dismiss();
+//            alreadySent.addAll(allPosts);
+//        }
+
+        public List<SinglePostData> getAllNewPosts() {
+            return allPosts;
+        }
+
+
+        void addDataToSharedPreferences(List<SinglePostData> newData, Context context) {
+
+            SharedPreferences appSharedPrefs = PreferenceManager
+                    .getDefaultSharedPreferences(context);
+            SharedPreferences.Editor prefsEditor = appSharedPrefs.edit();
+            Gson gson = new Gson();
+            String json = gson.toJson(newData);
+            prefsEditor.putString("SentDataList", json);
+            prefsEditor.apply();
 
         }
+
+
+        void compareTheLists(List<SinglePostData> allPosts, Context context) {
+
+            List<SinglePostData> postsToSendToFirebase = new ArrayList<>();
+            List<SinglePostData> alreadySentData = new ArrayList<>();
+            SharedPreferences getSharedPrefs = PreferenceManager
+                    .getDefaultSharedPreferences(context);
+            Gson gson = new Gson();
+            String sentData = getSharedPrefs.getString("SentDataList", "");
+            Type type = new TypeToken<List<SinglePostData>>() {
+            }.getType();
+            alreadySentData = gson.fromJson(sentData, type);
+
+            for (int i = 0; i < allPosts.size(); i++) {
+                for (int j = 0; j < alreadySentData.size(); j++) {
+                    if (allPosts.get(i).getTitle().equals(alreadySentData.get(j).getTitle())) {
+                        postsToSendToFirebase.add(allPosts.get(i));
+                        break;
+                    }
+                }
+            }
+
+
+            SharedPreferences.Editor prefsEditor = getSharedPrefs.edit();
+            String json = gson.toJson(alreadySentData);
+            prefsEditor.putString("SentDataList", json);
+            prefsEditor.apply();
+
+
+        }
+
+
     }
 
     @Override
@@ -158,6 +239,8 @@ public class SingleSiteAllData extends AppCompatActivity {
             progressDialog.dismiss();
             progressDialog = null;
         }
+
     }
+
 
 }
