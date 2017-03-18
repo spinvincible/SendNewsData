@@ -11,40 +11,40 @@
     tools:context="com.bestnewsapp.sendnewsdata.SingleSiteAllData">
 
 
+    <EditText
+        android:id="@+id/UrlData"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_centerHorizontal="true"
+        android:hint="Enter the Url Here" />
+
+
+    <Button
+        android:id="@+id/btnGetDataFromUrl"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/UrlData"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="10dp"
+        android:onClick="GetDataFromUrl"
+        android:text="Get The Data From The Url" />
+
+
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_below="@+id/btnGetDataFromUrl"
+        android:layout_centerHorizontal="true">
 
-        <RelativeLayout
+        <com.bestnewsapp.sendnewsdata.ui.FontTextView
+            android:id="@+id/txtViewDataFromtheUrl"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:id="@+id/articleHeading"
-                android:layout_alignBottom="@+id/articleImage"
-                android:layout_alignStart="@+id/articleImage"
-                android:layout_alignEnd="@+id/articleImage"
-                />
-
-            <ImageView
-                android:id="@+id/articleImage"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:adjustViewBounds="true" />
-
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:id="@+id/articleContent"
-                android:layout_below="@+id/articleImage"
-                />
-
-
-        </RelativeLayout>
-
+            android:textIsSelectable="true"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:hint="The Text To Be Entered" />
 
     </ScrollView>
 

@@ -1,35 +1,66 @@
 package com.bestnewsapp.sendnewsdata;
 
+import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.preference.PreferenceManager;
+import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.Html;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.android.volley.AuthFailureError;
+import com.android.volley.NetworkResponse;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.VolleyLog;
+import com.android.volley.toolbox.HttpHeaderParser;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+import com.bestnewsapp.sendnewsdata.util.ArticleTextExtractor;
 import com.google.firebase.database.DatabaseReference;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import okhttp3.FormBody;
+import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
 
 public class SingleSiteAllData extends AppCompatActivity {
 
     TextView allSiteData;
     ProgressDialog progressDialog;
+    EditText enterUrl;
+    TextView urlOutput;
+    Button getDataButton;
 
     List<SinglePostData> alreadySentData = new ArrayList<>();
     List<SinglePostData> allPosts = new ArrayList<>();
@@ -46,26 +77,41 @@ public class SingleSiteAllData extends AppCompatActivity {
         progressDialog.setCancelable(false);
         progressDialog.setIndeterminate(true);
         progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        Activity thisActivity = this;
+
+        enterUrl = (EditText) findViewById(R.id.UrlData);
+        urlOutput = (TextView) findViewById(R.id.txtViewDataFromtheUrl);
+        getDataButton = (Button) findViewById(R.id.btnGetDataFromUrl);
+
+        getDataButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                String headerData = "https://mercury.postlight.com/parser?url=";
+                String URL = headerData + enterUrl.getText().toString();
+                getVolleyData(URL);
+            }
+        });
 
 
-//        allSiteData = (TextView) findViewById(R.id.setText);
-
-        final LoadData loadData = new LoadData(this);
+        final LoadData loadData = new LoadData(this, thisActivity);
         loadData.execute();
 
-        allPosts = loadData.getAllNewPosts();
+    }
 
-//        compareTheLists(allPosts, alreadySentData, toBeSentToFirebase);
+    public void GetDataFromUrl(View view) {
     }
 
 
     public class LoadData extends AsyncTask<Void, Void, String> {
         String data = "";
         Context context;
+        Activity activity;
         List<SinglePostData> allPosts = new ArrayList<>();
+        List<SinglePostData> noRepeatAllPosts = new ArrayList<>();
 
-        public LoadData(Context context) {
+        public LoadData(Context context, Activity activity) {
             this.context = context;
+            this.activity = activity;
 
         }
 
@@ -97,6 +143,8 @@ public class SingleSiteAllData extends AppCompatActivity {
             try {
 //                doc = Jsoup.connect(NYTimesSinglePost).get();
                 doc = Jsoup.connect(NytTimes).get();
+                //  Log.d("HTML" , "\n \n \n"+doc.toString());
+
                 el = doc.select("article");
 //                singleAttr = doc.select("article").first();
 //
@@ -111,11 +159,41 @@ public class SingleSiteAllData extends AppCompatActivity {
 
                 parseNYTimesData(el, allPosts);
 
-                addDataToSharedPreferences(allPosts, context);
+                String mobilizedHtml = ArticleTextExtractor.extractContent(NYTimesSinglePost, "  ");
 
-                compareTheLists(allPosts, context);
+                Log.v("HTML", mobilizedHtml + "\n \n \n" + el.toString());
+//                int sizeOfData = allPosts.size();
+//
+//                for (SinglePostData event : allPosts) {
+//                    boolean isFound = false;
+//                    // check if the event name exists in noRepeat
+//                    for (SinglePostData e : noRepeatAllPosts) {
+//                        if (e.getTitle().equals(event.getTitle()))
+//                            isFound = true;
+//                        break;
+//                    }
+//
+//                    if (!isFound) noRepeatAllPosts.add(event);
+//                }
+
+                for (int i = 0; i < allPosts.size(); i++) {
+                    boolean isFound = false;
+                    for (int j = i + 1; j < allPosts.size(); j++) {
+                        if (allPosts.get(i).getImg_url().equals(allPosts.get(j).getImg_url())) {
+                            isFound = true;
+                            break;
+                        }
+                    }
+                    if (!isFound) noRepeatAllPosts.add(allPosts.get(i));
+                }
+
+//                addDataToSharedPreferences(allPosts, context);
+
+                compareTheLists(noRepeatAllPosts, context);
 
             } catch (IOException e) {
+                e.printStackTrace();
+            } catch (Exception e) {
                 e.printStackTrace();
             }
             return title;
@@ -133,7 +211,17 @@ public class SingleSiteAllData extends AppCompatActivity {
         }
 
 
-        public void sendDataToFirebase(List<SinglePostData> allPosts) {
+        public void sendDataToFirebase(final List<SinglePostData> allPosts) {
+
+
+            activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(context, "Total number of articles to be updated " + String.valueOf(allPosts.size()), Toast.LENGTH_LONG).show();
+                }
+            });
+
+
             for (int i = 0; i < allPosts.size(); i++) {
                 SinglePostData oneEntry = allPosts.get(i);
                 final DatabaseReference databaseReference = FirebaseUtil.getBaseRef();
@@ -165,71 +253,54 @@ public class SingleSiteAllData extends AppCompatActivity {
                     SinglePostData newsItem = new SinglePostData(title, urlPost, image, timeStamp);
                     oAllPosts.add(newsItem);
                 }
-
             }
         }
-
-
-//        public void compareTheLists(List<SinglePostData> allPosts, List<SinglePostData> alreadySent, List<SinglePostData> postsToSendToFirebase) {
-//
-//            for (int i = 0; i < allPosts.size(); i++) {
-//                for (int j = 0; j < alreadySent.size(); j++) {
-//                    if (allPosts.get(i) == alreadySent.get(j))
-//                        postsToSendToFirebase.add(allPosts.get(i));
-//                }
-//            }
-//            alreadySent.addAll(allPosts);
-//        }
 
         public List<SinglePostData> getAllNewPosts() {
             return allPosts;
         }
 
 
-        void addDataToSharedPreferences(List<SinglePostData> newData, Context context) {
-
-            SharedPreferences appSharedPrefs = PreferenceManager
-                    .getDefaultSharedPreferences(context);
-            SharedPreferences.Editor prefsEditor = appSharedPrefs.edit();
-            Gson gson = new Gson();
-            String json = gson.toJson(newData);
-            prefsEditor.putString("SentDataList", json);
-            prefsEditor.apply();
-
-        }
-
-
-        void compareTheLists(List<SinglePostData> allPosts, Context context) {
+        void compareTheLists(List<SinglePostData> noRepeatAllPosts, final Context context) {
 
             List<SinglePostData> postsToSendToFirebase = new ArrayList<>();
             List<SinglePostData> alreadySentData = new ArrayList<>();
             SharedPreferences getSharedPrefs = PreferenceManager
                     .getDefaultSharedPreferences(context);
             Gson gson = new Gson();
-            String sentData = getSharedPrefs.getString("SentDataList", "");
+            String sentData = getSharedPrefs.getString("SendNYTTimesList", "");
             Type type = new TypeToken<List<SinglePostData>>() {
             }.getType();
             alreadySentData = gson.fromJson(sentData, type);
-
-            for (int i = 0; i < allPosts.size(); i++) {
-                for (int j = 0; j < alreadySentData.size(); j++) {
-                    if (allPosts.get(i).getTitle().equals(alreadySentData.get(j).getTitle())) {
-                        postsToSendToFirebase.add(allPosts.get(i));
-                        break;
+            if (alreadySentData != null) {
+                for (int i = 0; i < noRepeatAllPosts.size(); i++) {
+                    boolean isFound = false;
+                    for (int j = 0; j < alreadySentData.size(); j++) {
+                        if (noRepeatAllPosts.get(i).getImg_url().equals(alreadySentData.get(j).getImg_url())) {
+                            isFound = true;
+                            break;
+                        }
                     }
+                    if (!isFound) postsToSendToFirebase.add(noRepeatAllPosts.get(i));
                 }
             }
 
+            if (postsToSendToFirebase.size() > 0)
+                sendDataToFirebase(postsToSendToFirebase);
+            else
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(context, "No new articles found on the server", Toast.LENGTH_LONG).show();
+                    }
+                });
 
             SharedPreferences.Editor prefsEditor = getSharedPrefs.edit();
-            String json = gson.toJson(alreadySentData);
-            prefsEditor.putString("SentDataList", json);
+            String json = gson.toJson(noRepeatAllPosts);
+            prefsEditor.putString("SendNYTTimesList", json);
             prefsEditor.apply();
 
-
         }
-
-
     }
 
     @Override
@@ -243,4 +314,37 @@ public class SingleSiteAllData extends AppCompatActivity {
     }
 
 
+    public String getVolleyData(String url) {
+
+
+        RequestQueue requestQueue = Volley.newRequestQueue(this);
+
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url, new Response.Listener<String>() {
+            @Override
+            public void onResponse(String response) {
+                urlOutput.setText(Html.fromHtml(response));
+                Log.i("VOLLEYData", response);
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                Log.e("VOLLEY", error.toString());
+            }
+        }) {
+
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+
+                Map<String, String> params = new HashMap<>();
+                params.put("x-api-key", "ZW7P0pMC3mGGdB6m0qSojq44W8TEGAfdzpMcvpWN");
+                return params;
+            }
+
+        };
+
+        requestQueue.add(stringRequest);
+
+
+        return "";
+    }
 }
